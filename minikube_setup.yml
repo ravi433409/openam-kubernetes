@@ -1,0 +1,52 @@
+- name: Check Minikube's status.
+  command: minikube status
+  register: minikube_status
+  changed_when: false
+  ignore_errors: true
+
+- debug: var=minikube_status.stdout_lines
+
+# Otherwise will start minikube
+- name: Start Minikube if it's not running.
+  command: minikube start "{{ mini_kube_specs }}"
+  when: "not minikube_status.stdout or 'Running' not in minikube_status.stdout"
+
+- name: "Enable k8 engress"
+  command: "minikube addons enable ingress"
+  register: "output"
+
+- debug: var=output.stdout_lines
+
+# workaround for Minikube issue 1568. The workaround lets pods deployed on Minikube reach themselves on the network.
+# minikube ssh sudo ip link set docker0 promisc on
+- name: "Workaround for Minikube issue 1568"
+  command: "minikube ssh sudo ip link set docker0 promisc on"
+  register: "output"
+
+- debug: var=output.stdout_lines
+
+- name: Create namespace
+  k8s:
+    name: "{{ namespace_name }}"
+    api_version: v1
+    kind: Namespace
+    state: present
+
+- name: Make the new namespace your active namespace
+  command: "kubens {{ namespace_name }}"
+
+### Hostname Resolution ###
+- name: Report Minikube ip
+  command: "minikube ip"
+  register: "output"
+
+- debug: var=output.stdout_lines
+
+# TODO: make sure that the /etc/hosts file has the right ip/host line
+# minikube-ip-address my-namespace.iam.example.com
+
+- name: Set Up Your Local Computer to Use Minikube’s Docker Engine
+  shell: eval $(minikube docker-env)
+  register: "output"
+
+- debug: var=output.stdout_lines
